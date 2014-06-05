@@ -370,6 +370,11 @@ module Sensu
           else
             result[:check]
           end
+          if check[:client]
+            client[:sender] = client[:name]
+            client[:name] = check[:client]
+            check.delete(:client)
+          end
           if check[:aggregate]
             aggregate_result(result)
           end
