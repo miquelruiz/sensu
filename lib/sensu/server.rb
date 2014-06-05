@@ -30,11 +30,19 @@ module Sensu
         @logger.debug('received keepalive', {
           :client => client
         })
-        @redis.set('client:' + client[:name], MultiJson.dump(client)) do
-          @redis.sadd('clients', client[:name]) do
-            @transport.ack(message_info)
+        clients = client[:names] || []
+        clients.push(client[:name])
+        clients.each do |name|
+          thisclient = client.reject {|k,v| k == :names }
+          thisclient[:name] = name
+          thisclient[:sender] = client[:name]
+          @redis.set('client:' + name, MultiJson.dump(thisclient)) do
+            @redis.sadd('clients', name) do
+              @transport.ack(message_info)
+            end
           end
         end
+        header.ack
       end
     end
 
