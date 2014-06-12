@@ -90,6 +90,29 @@ module Sensu
       [substituted, unmatched_tokens]
     end
 
+    def execute_triggers(check, &block)
+      @logger.debug('executing triggers', { :check => check })
+      check[:triggers_output] = {}
+      check[:triggers].each do |trigger_name|
+        trigger = @settings[:triggers][trigger_name]
+        if trigger.has_key?(:command)
+          command = trigger[:command]
+          begin
+            output, status = IO.popen(command, 'r', trigger[:timeout] || check[:timeout])
+            check[:triggers_output][trigger_name] = output
+          rescue => error
+            check[:triggers_output][trigger_name] = 'Failed: ' + error.to_s
+            @logger.debug('error executing trigger', { :error => error.to_s })
+          end
+        else
+          @logger.warn('trigger not defined', {
+            :check => check
+          })
+        end
+      end
+      block.call(check)
+    end
+
     def execute_check_command(check)
       @logger.debug('attempting to execute check command', {
         :check => check
@@ -104,7 +127,11 @@ module Sensu
             check[:duration] = ('%.3f' % (Time.now.to_f - started)).to_f
             check[:output] = output
             check[:status] = status
-            publish_result(check)
+            if check[:status] != 0 && check[:triggers]
+              execute_triggers(check) { |c| publish_result(c) }
+            else
+              publish_result(check)
+            end
             @checks_in_progress.delete(check[:name])
           end
         else
