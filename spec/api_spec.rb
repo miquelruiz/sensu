@@ -297,6 +297,22 @@ describe 'Sensu::API' do
     end
   end
 
+  it 'can request check history for multiple clients' do
+    api_test do
+      api_request('/history?client[]=i-424242') do |http, body|
+        http.response_header.status.should eq(200)
+        body.should be_kind_of(Array)
+        #body.should have(1).items
+        body[0][:check].should eq('success')
+        body[0][:history].should be_kind_of(Array)
+        body[0][:last_execution].should eq(1363224805)
+        body[0][:last_status].should eq(0)
+        async_done
+      end
+    end
+  end
+
+
   it 'can delete a client' do
     api_test do
       api_request('/client/i-424242', :delete) do |http, body|

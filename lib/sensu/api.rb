@@ -262,6 +262,42 @@ module Sensu
           })
         end
       end
+
+      def history_for(client_names, &block)
+        response = Array.new
+        client_names.each do |client_name|
+          $redis.smembers('history:' + client_name) do |checks|
+            unless checks.empty?
+              checks.each_with_index do |check_name, index|
+                history_key = 'history:' + client_name + ':' + check_name
+                $redis.lrange(history_key, -21, -1) do |history|
+                  history.map! do |status|
+                    status.to_i
+                  end
+                  execution_key = 'execution:' + client_name + ':' + check_name
+                  $redis.get(execution_key) do |last_execution|
+                    unless history.empty? || last_execution.nil?
+                      item = {
+                        :check => check_name,
+                        :history => history,
+                        :last_execution => last_execution.to_i,
+                        :last_status => history.last
+                      }
+                      response << item
+                    end
+                    if index == checks.size - 1
+                      block.call(response)
+                    end
+                  end
+                end
+              end
+            else
+              block.call(response)
+            end
+          end
+        end
+      end
+
     end
 
     before do
@@ -324,6 +360,18 @@ module Sensu
       end
     end
 
+    aget '/history/?' do
+      client_names = Array.new
+      if params[:client].kind_of?(String)
+        client_names << params[:client]
+      else
+        client_names = params[:client]
+      end
+      history_for(client_names) do |clients_history|
+        body Oj.dump(clients_history)
+      end
+    end
+
     aget %r{/clients?/([\w\.-]+)/?$} do |client_name|
       $redis.get('client:' + client_name) do |client_json|
         unless client_json.nil?
@@ -335,35 +383,8 @@ module Sensu
     end
 
     aget %r{/clients/([\w\.-]+)/history/?$} do |client_name|
-      response = Array.new
-      $redis.smembers('history:' + client_name) do |checks|
-        unless checks.empty?
-          checks.each_with_index do |check_name, index|
-            history_key = 'history:' + client_name + ':' + check_name
-            $redis.lrange(history_key, -21, -1) do |history|
-              history.map! do |status|
-                status.to_i
-              end
-              execution_key = 'execution:' + client_name + ':' + check_name
-              $redis.get(execution_key) do |last_execution|
-                unless history.empty? || last_execution.nil?
-                  item = {
-                    :check => check_name,
-                    :history => history,
-                    :last_execution => last_execution.to_i,
-                    :last_status => history.last
-                  }
-                  response << item
-                end
-                if index == checks.size - 1
-                  body Oj.dump(response)
-                end
-              end
-            end
-          end
-        else
-          body Oj.dump(response)
-        end
+      history_for([client_name]) do |client_history|
+        body Oj.dump(client_history)
       end
     end
 
