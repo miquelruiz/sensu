@@ -541,6 +541,23 @@ describe 'Sensu::API' do
     end
   end
 
+  it 'can provide filtered multiple stashes' do
+    api_test do
+      options = { :body => { :key => 'value' } }
+      api_request('/stash/tester', :post, options) do |http, body|
+        api_request('/stashes?path[]=test/test&path[]=tester') do |http, body|
+          http.response_header.status.should eq(200)
+          body.should be_kind_of(Array)
+          body.length.should eq(2)
+          sorted = body.sort { |a, b| a[:path] <=> b[:path] }
+          body[0][:path].should eq('tester')
+          body[1][:path].should eq('test/test')
+          async_done
+        end
+      end
+    end
+  end
+
   it 'can delete a stash' do
     api_test do
       api_request('/stash/test/test', :delete) do |http, body|

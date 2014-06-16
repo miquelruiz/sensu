@@ -654,6 +654,13 @@ module Sensu
     aget '/stashes/?' do
       response = Array.new
       $redis.smembers('stashes') do |stashes|
+        unless params[:path].nil?
+          if params[:path].kind_of?(Array)
+            stashes = stashes & params[:path]
+          else
+            stashes = [params[:path]]
+          end
+        end
         unless stashes.empty?
           stashes.each_with_index do |path, index|
             $redis.get('stash:' + path) do |stash_json|
