@@ -367,6 +367,14 @@ module Sensu
       end
     end
 
+    adelete %r{/clients?/([\w\.-]+)/([\w\.-]+)/?$} do |client_name, check_name|
+      settings.redis.srem('history:' + client_name, check_name) do
+        settings.redis.del('history:'   + client_name + ':' + check_name)
+        settings.redis.del('execution:' + client_name + ':' + check_name)
+      end
+      issued!
+    end
+
     aget '/checks/?' do
       body MultiJson.dump(settings.all_checks)
     end
